@@ -1,5 +1,4 @@
 #include <iostream>
-#include <climits>
 #include <vector>
 #include <algorithm>
 #include <map>
@@ -15,8 +14,8 @@ using namespace std;
 #define CALL_ARRIVAL 0
 #define CALL_END 1
 #define MATRIX_SIZE 26
-#define TOPOLOGY_DATA "topology_small.dat"
-#define WORKLOAD_DATA "callworkload_small.dat"
+#define TOPOLOGY_DATA "topology.dat"
+#define WORKLOAD_DATA "callworkload.dat"
 
 /* Event record */
 struct Event
@@ -36,8 +35,8 @@ int available[MATRIX_SIZE][MATRIX_SIZE];
 int cost[MATRIX_SIZE][MATRIX_SIZE];
 list<EventList> workLoad;
 map<int, stack<int> > routesUsed;
-int shpfHops = 0; 
-float shpfDelay = 0; 
+float shpfHops = 0, sdpfHops = 0; 
+float shpfDelay = 0, sdpfDelay = 0; 
 
 // custom link comparison; for sorting events
 bool compareEvent(const EventList &first, const EventList &second)
@@ -46,10 +45,10 @@ bool compareEvent(const EventList &first, const EventList &second)
 }
 
 // Determines if a call event can be routed 
-int RouteCall(char source, char destination, EventList currentEvent)
+int RouteCall(char source, char destination, EventList currentEvent, int resource[MATRIX_SIZE][MATRIX_SIZE], string algo)
 {
     
-  stack<int> path = djikstras(cost, source, destination);
+  stack<int> path = djikstras(resource, source, destination);
   stack<int> route;
   string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   string link;
@@ -69,11 +68,11 @@ int RouteCall(char source, char destination, EventList currentEvent)
     path.pop();
 
     link = s + d;
-    cout <<"Link: " << link << endl;
+    //cout <<"Link: " << link << endl;
     route.push(srcNode); // add link to event route 
     route.push(dstNode);
     
-    // check if link is at capacity 
+    // check if a link taken by call is at capacity 
     if ((available[srcNode][dstNode] <= 0) && (available[dstNode][srcNode] <= 0)){
       if (!route.empty()){
         srcNode1 = route.top();
@@ -83,12 +82,13 @@ int RouteCall(char source, char destination, EventList currentEvent)
         dstNode1 = route.top();
         route.pop();
 
+        // restore capacity back to link 
         available[srcNode1][dstNode1] = available[srcNode1][dstNode1] +1; 
         available[dstNode1][srcNode1] = available[dstNode1][srcNode1] +1;
 
         srcNode1 = dstNode1; 
       }
-      cout << "Blocked "<< endl;
+      //cout << "Blocked "<< endl;
       return 0; // Call can't be completed 
         
     }
@@ -99,8 +99,13 @@ int RouteCall(char source, char destination, EventList currentEvent)
     available[dstNode][srcNode] = available[dstNode][srcNode] - 1;
     //cout << "after link cap  1: " << available[srcNode][dstNode] << " link cap 2: " << available[srcNode][dstNode] << endl; 
 
-    shpfHops++; // increase links it went through, for shortest hop path first 
-    shpfDelay = shpfDelay + propdelay[srcNode][dstNode];
+    if (algo == "SHPF"){
+      shpfHops++; // increase links it went through, for shortest hop path first 
+      shpfDelay = shpfDelay + propdelay[srcNode][dstNode]; // store delay for links traversed through 
+    }else if (algo == "SDPF"){
+      sdpfHops++; // increase links it went through, for shortest delay path first 
+      sdpfDelay = sdpfDelay + propdelay[srcNode][dstNode];; // store delay for links traversed through 
+    }
     srcNode = dstNode; s = d; // set to next node 
   }
 
@@ -127,7 +132,7 @@ void ReleaseCall(int callid)
       route.pop();
 
       link = s + d;
-      cout <<"Link Released: " << link << endl;
+      //cout <<"Link Released: " << link << endl;
 
       // increase capacity by 1 
       available[srcNode][dstNode] = available[srcNode][dstNode] +1; 
@@ -137,9 +142,53 @@ void ReleaseCall(int callid)
     }
   }
   else{
-    cout << "Invalid release call" << endl;
+    //cout << "Invalid release call" << endl;
   }
-        
+}
+
+// Simulates all 4 policies 
+void simulatePolicy(string algo, int resource[MATRIX_SIZE][MATRIX_SIZE], list<EventList> workLoad){
+  //Simulates the call arrivals and departures
+  float time = 0.0;
+  int success = 0, blocked = 0, totalCalls = 0;
+  int numevents = workLoad.size();
+  //float shpfAverage = 0; 
+
+  while ((numevents > 0) && (!workLoad.empty()))
+  {
+    // get current event
+    EventList currentEvent = workLoad.front();
+    workLoad.pop_front();
+
+    /* Get information about the current event */
+    //printf("Event of type %d at time %8.6f (call %d from %c to %c)\n", currentEvent.event_type, currentEvent.event_time, currentEvent.callid, currentEvent.source, currentEvent.destination);
+
+    if (currentEvent.event_type == CALL_ARRIVAL)
+    {
+      totalCalls++;
+
+      // Pass resources to route call
+      if (RouteCall(currentEvent.source, currentEvent.destination, currentEvent, resource, algo) == 1)
+      {
+        success++; // call was successful 
+      }
+      else
+      {
+        blocked++; // call wasn't successful
+      }
+    }
+    else
+    {
+      ReleaseCall(currentEvent.callid); // Handles end call event 
+    }
+  }
+
+  if (algo == "SHPF"){
+    //shpfAverage = shpfHops/success; // calculate hops for SHPF
+    cout << "SHPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t" << shpfHops/success << "\t" << shpfDelay/success << endl;
+  }else if(algo == "SDPF"){ 
+    cout << "SDPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t" << sdpfHops/success << "\t" << sdpfDelay/success << endl;
+  } 
 }
 
 int main()
@@ -204,43 +253,9 @@ int main()
   // sort topology list in order for the event to arrive in order
   workLoad.sort(compareEvent);
 
-  //Simulates the call arrivals and departures
-  float time = 0.0;
-  int success = 0, blocked = 0, totalCalls = 0;
-  int numevents = workLoad.size();
-  float shpfAverage = 0; 
-
-  while ((numevents > 0) && (!workLoad.empty()))
-  {
-
-    // get current event
-    EventList currentEvent = workLoad.front();
-    workLoad.pop_front();
-
-    /* Get information about the current event */
-    printf("Event of type %d at time %8.6f (call %d from %c to %c)\n", currentEvent.event_type, currentEvent.event_time, currentEvent.callid, currentEvent.source, currentEvent.destination);
-
-    if (currentEvent.event_type == CALL_ARRIVAL)
-    {
-      totalCalls++;
-      if (RouteCall(currentEvent.source, currentEvent.destination, currentEvent) == 1)
-      {
-        success++; // call was successful 
-      }
-      else
-      {
-        blocked++; // call wasn't successful
-      }
-    }
-    else
-    {
-      ReleaseCall(currentEvent.callid); // Handles end call event 
-    }
-  }
- 
-  shpfAverage = shpfHops/success;
-  /* Print final report here */
-  //cout <<"SHORTEST HOP PATH FIRST" << endl;
+  //Print final report for each policy 
   cout << "Policy\tCalls\tSuccess\tBlocked(%)\tHops\tDelay"<< endl;
-  cout << "SHPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t\t" << shpfAverage << "\t" << shpfDelay/success << endl;
+  cout <<"  -----------------------------------------------" << endl; 
+  //simulatePolicy("SHPF", cost, workLoad); // Run Simulation for Short Hop Path First
+  simulatePolicy("SDPF", propdelay, workLoad); // Run Simulation for Short Delay Path First 
 }
