@@ -1,6 +1,7 @@
 #include <iostream>
 #include <climits>
 #include <vector>
+#include <algorithm>
 #include <map>
 #include <list>
 #include <stack>
@@ -9,10 +10,12 @@
 
 using namespace std;
 
+// Global constants 
 #define CALL_ARRIVAL 0
 #define CALL_END 1
-#define MAX_ROW 26
-#define MAX_COL 26
+#define MATRIX_SIZE 26
+#define TOPOLOGY_DATA "topology_small.dat"
+#define WORKLOAD_DATA "callworkload_small.dat"
 
 /* Event record */
 struct Event
@@ -23,16 +26,23 @@ struct Event
   char source;
   char destination;
   float duration;
-  stack<string> route;
 } typedef EventList;
 
 /* Global matrix data structure for network topology/state information */
-int propdelay[MAX_ROW][MAX_COL];
-int capacity[MAX_ROW][MAX_COL];
-map<string, int> linkCapacity;
-int available[MAX_ROW][MAX_COL];
-int cost[MAX_ROW][MAX_COL];
+int propdelay[MATRIX_SIZE][MATRIX_SIZE];
+int capacity[MATRIX_SIZE][MATRIX_SIZE];
+int available[MATRIX_SIZE][MATRIX_SIZE];
+int cost[MATRIX_SIZE][MATRIX_SIZE];
 list<EventList> workLoad;
+map<int, stack<int> > routesUsed;
+int shpfHops = 0; 
+float shpfDelay = 0; 
+
+// custom link comparison; for sorting events
+bool compareEvent(const EventList &first, const EventList &second)
+{
+  return (first.event_time < second.event_time);
+}
 
 /* A utility function to find the vertex with minimum distance
 value, from the set of vertices not yet included in shortest
@@ -42,48 +52,43 @@ int minDistance(int dist[], bool sptSet[])
   // Initialize min value
   int min = INT_MAX, min_index;
 
-  for (int v = 0; v < MAX_ROW; v++)
-  {
-    if (sptSet[v] == false && dist[v] <= min)
-    {
-      min = dist[v];
-      min_index = v;
+  for (int v = 0; v < MATRIX_SIZE; v++){
+    if (sptSet[v] == false && dist[v] <= min){
+      min = dist[v], min_index = v;
     }
   }
 
   return min_index;
 }
 
-stack<int> djikstras(int graph[MAX_ROW][MAX_COL], char src, char dst)
+stack<int> djikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], char src, char dst)
 {
+  int dist[MATRIX_SIZE];
+  bool setPath[MATRIX_SIZE];
+  int previous[MATRIX_SIZE];
 
-  int dist[MAX_ROW];
-  bool setPath[MAX_ROW];
-  int previous[MAX_ROW];
-
-  for (int i = 0; i < MAX_ROW; i++)
+  for (int i = 0; i < MATRIX_SIZE; i++)
   {
     dist[i] = INT_MAX;
     setPath[i] = false;
     previous[i] = INT_MAX;
   }
+  dist[src - 'A'] = 0; // distance to it self is 0 
 
-  dist[src - 'A'] = 0;
-
-  //find the path from src to dst and update the availabilities and as well as the capacities
-  for (int count = 0; count < MAX_ROW - 1; count++)
+  //find the path from src to dst 
+  for (int count = 0; count < MATRIX_SIZE - 1; count++)
   {
     int u = minDistance(dist, setPath);
 
     setPath[u] = true;
 
     //if U is the DST then early exit
-    if (u == dst - 'A')
-    {
-      break;
-    }
+    // if (u == dst - 'A')
+    // {
+    //   break;
+    // }
 
-    for (int v = 0; v < MAX_ROW; v++)
+    for (int v = 0; v < MATRIX_SIZE; v++)
     {
       if (!setPath[v] && graph[u][v] && dist[u] != INT_MAX && dist[u] + graph[u][v] < dist[v])
       {
@@ -104,90 +109,129 @@ stack<int> djikstras(int graph[MAX_ROW][MAX_COL], char src, char dst)
     }
   }
 
+  // while (!path.empty())
+  // {
+  //     cout << path.top() << ' ';
+  //     path.pop();
+  // }
+  // cout << endl;
+
   return path;
 }
 
+// Determines if a call event can be routed 
 int RouteCall(char source, char destination, EventList currentEvent)
 {
+    
   stack<int> path = djikstras(cost, source, destination);
-  int success = 0;
-  int tmp;
+  stack<int> route;
   string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   string link;
-  string srcNode, dstNode;
 
-  // gets source destination
-  tmp = path.top();
+  int srcNode = 0, dstNode=0;
+  int srcNode1 = 0, dstNode1=0;
+
+  string s, d; 
+
+  srcNode = path.top();  s = alpha[srcNode];
   path.pop();
+  
 
-  // get source node character
-  srcNode = alpha[tmp];
-  //cout << "Souce node " << srcNode << endl;
-
-  while (!path.empty())
+  while(!path.empty())
   {
-    tmp = path.top();
+    dstNode = path.top(); d = alpha[dstNode];
     path.pop();
-    //currentEvent.route.push_back(tmp); // add path currently taken by call
-    //cout << "tmp: " << tmp << endl;
 
-    // get next node character
-    dstNode = alpha[tmp];
+    link = s + d;
+    cout <<"Link: " << link << endl;
+    route.push(srcNode); // add link to event route 
+    route.push(dstNode);
+    
+    // check if link is at capacity 
+    if ((available[srcNode][dstNode] <= 0) && (available[dstNode][srcNode] <= 0)){
+      if (!route.empty()){
+        srcNode1 = route.top();
+        route.pop(); 
+      }
+      while(!route.empty()){
+        dstNode1 = route.top();
+        route.pop();
 
-    // update link capacity
-    link = srcNode + dstNode;
+        available[srcNode1][dstNode1] = available[srcNode1][dstNode1] +1; 
+        available[dstNode1][srcNode1] = available[dstNode1][srcNode1] +1;
 
-    // add path currently taken by call
-    currentEvent.route.push(link);
-
-    if (linkCapacity[link] > 0) // check if link is at capacity
-    {
-      //cout << "Link capcity: " << linkCapacity[link] << endl;
-      linkCapacity[link] = linkCapacity[link] - 1;
-      success = 1;
+        srcNode1 = dstNode1; 
+      }
+      cout << "Blocked "<< endl;
+      return 0; // Call can't be completed 
+        
     }
-    else
-    {
-      return 0; // link is at capacity, reject call
-    }
+    
+    // reduce capacity by one 
+    //cout << "link cap  1: " << available[srcNode][dstNode] << " link cap 2: " << available[srcNode][dstNode] << endl; 
+    available[srcNode][dstNode] = available[srcNode][dstNode] - 1; 
+    available[dstNode][srcNode] = available[dstNode][srcNode] - 1;
+    //cout << "after link cap  1: " << available[srcNode][dstNode] << " link cap 2: " << available[srcNode][dstNode] << endl; 
 
-    srcNode = dstNode; // sets to nextnode
+    shpfHops++; // increase links it went through, for shortest hop path first 
+    shpfDelay = shpfDelay + propdelay[srcNode][dstNode];
+    srcNode = dstNode; s = d; // set to next node 
   }
 
-  return success;
+  routesUsed.insert(pair<int, stack<int> >(currentEvent.callid, route)); 
+  return 1;
 }
 
 // frees up link taken by call
-void ReleaseCall(EventList currentEvent)
+void ReleaseCall(int callid)
 {
-  string link = "";
-  while (!currentEvent.route.empty())
-  {
-    link = currentEvent.route.top();
-    currentEvent.route.pop();
+  // Check if call is valid 
+  if (routesUsed.find(callid) != routesUsed.end()){
+    string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    string s, d, link; 
+    stack<int> route = routesUsed[callid]; 
+    int srcNode = 0, dstNode=0;
+    
+    srcNode = route.top(); s = alpha[srcNode]; // get first node 
+    route.pop();
 
-    linkCapacity[link] = linkCapacity[link] + 1; // add 1 to links capacity
+    while (!route.empty())
+    {
+      dstNode = route.top(); d = alpha[dstNode];
+      route.pop();
+
+      link = s + d;
+      cout <<"Link Released: " << link << endl;
+
+      // increase capacity by 1 
+      available[srcNode][dstNode] = available[srcNode][dstNode] +1; 
+      available[dstNode][srcNode] = available[dstNode][srcNode] +1;
+
+      srcNode = dstNode; // set to previous destination 
+    }
   }
+  else{
+    cout << "Invalid release call" << endl;
+  }
+        
 }
 
 int main()
 {
-  FILE *fp1 = fopen("topology.dat", "r");
+  FILE *fp1 = fopen(TOPOLOGY_DATA, "r");
   int i, row, col = 0;
   char src, dst;
   int delay, cap;
-  string link = "";
+  string link1 = ""; 
+  string link2 = "";
 
-  //fp1 = fopen("topology.dat", "r");
+  // read in topology data from "topology.dat"
   while ((i = fscanf(fp1, "%c %c %d %d\n", &src, &dst, &delay, &cap)) == 4)
   {
-    link += src;
-    link += dst;
-    //cout << "init link: " << link << endl;
-    linkCapacity.insert(pair<string, int>(link, cap));
-
+    // row and column position 
     row = src - 'A';
     col = dst - 'A';
+    // fill in matrix with capacity, delay and cost information
     propdelay[row][col] = delay;
     propdelay[col][row] = delay;
     capacity[row][col] = cap;
@@ -197,20 +241,17 @@ int main()
     cost[row][col] = 1;
     cost[col][row] = 1;
 
-    link = ""; // reset link
   }
   fclose(fp1);
 
-  //* Next read in the calls from "callworkload.dat" and set up events */
+  // Read in the calls from "callworkload.dat" 
   i = 0;
   int id = 0;
   float dur, arr;
-  FILE *fp2 = fopen("callworkload.dat", "r");
+  FILE *fp2 = fopen(WORKLOAD_DATA, "r");
   while ((i = fscanf(fp2, "%f %c %c %f\n", &arr, &src, &dst, &dur)) == 4)
   {
-    //cout << "Duration: " << arr <<endl;
-
-    // create new event
+    // create new call event
     EventList tmpEvent;
     tmpEvent.event_time = arr;
     tmpEvent.event_type = CALL_ARRIVAL;
@@ -234,14 +275,14 @@ int main()
   }
   fclose(fp2);
 
-  // sort topology list so the event arrive in order
+  // sort topology list in order for the event to arrive in order
+  workLoad.sort(compareEvent);
 
-  /* Now simulate the call arrivals and departures */
+  //Simulates the call arrivals and departures
   float time = 0.0;
-  int success = 0, blocked = 0;
+  int success = 0, blocked = 0, totalCalls = 0;
   int numevents = workLoad.size();
-
-  //cout << "Workload length: " << numevents << endl;
+  float shpfAverage = 0; 
 
   while ((numevents > 0) && (!workLoad.empty()))
   {
@@ -255,20 +296,25 @@ int main()
 
     if (currentEvent.event_type == CALL_ARRIVAL)
     {
+      totalCalls++;
       if (RouteCall(currentEvent.source, currentEvent.destination, currentEvent) == 1)
       {
-        success++;
+        success++; // call was successful 
       }
       else
       {
-        blocked++;
+        blocked++; // call wasn't successful
       }
     }
     else
     {
-      ReleaseCall(currentEvent);
+      ReleaseCall(currentEvent.callid); // Handles end call event 
     }
   }
+ 
+  shpfAverage = shpfHops/success;
   /* Print final report here */
-  cout << "Success: " << success << " Blocked: " << blocked << endl;
+  //cout <<"SHORTEST HOP PATH FIRST" << endl;
+  cout << "Policy\tCalls\tSuccess\tBlocked(%)\tHops\tDelay"<< endl;
+  cout << "SHPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t\t" << shpfAverage << "\t" << shpfDelay/success << endl;
 }

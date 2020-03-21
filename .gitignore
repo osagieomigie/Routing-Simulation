@@ -32,4 +32,7 @@
 *.app
 
 main 
-main-2.cpp
+main-.cpp
+.vscode
+main.dSYM
+settings*

@@ -5,6 +5,11 @@
         "stack": "cpp",
         "vector": "cpp",
         "list": "cpp",
-        "iosfwd": "cpp"
-    }
+        "iosfwd": "cpp",
+        "algorithm": "cpp",
+        "chrono": "cpp",
+        "limits": "cpp",
+        "ratio": "cpp"
+    },
+    "C_Cpp.formatting": "Disabled"
 }
