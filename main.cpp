@@ -14,8 +14,8 @@ using namespace std;
 #define CALL_ARRIVAL 0
 #define CALL_END 1
 #define MATRIX_SIZE 26
-#define TOPOLOGY_DATA "topology.dat"
-#define WORKLOAD_DATA "callworkload.dat"
+#define TOPOLOGY_DATA "top_sina.dat"//"topology_small.dat"
+#define WORKLOAD_DATA "work_sina.dat" //"callworkload_small.dat"
 
 /* Event record */
 struct Event
@@ -35,8 +35,8 @@ int available[MATRIX_SIZE][MATRIX_SIZE];
 int cost[MATRIX_SIZE][MATRIX_SIZE];
 list<EventList> workLoad;
 map<int, stack<int> > routesUsed;
-float shpfHops = 0, sdpfHops = 0; 
-float shpfDelay = 0, sdpfDelay = 0; 
+float shpfHops = 0, sdpfHops = 0, llpHops =0; 
+float shpfDelay = 0, sdpfDelay = 0, llpDelay =0; 
 
 // custom link comparison; for sorting events
 bool compareEvent(const EventList &first, const EventList &second)
@@ -47,8 +47,18 @@ bool compareEvent(const EventList &first, const EventList &second)
 // Determines if a call event can be routed 
 int RouteCall(char source, char destination, EventList currentEvent, int resource[MATRIX_SIZE][MATRIX_SIZE], string algo)
 {
-    
-  stack<int> path = djikstras(resource, source, destination);
+  stack<int> path;
+  if (algo == "LLP"){
+    path = llpDjikstras(resource, capacity, source, destination, algo); 
+    if (path.size() == 0){
+      return 0; // call is blocked 
+    }
+  }else
+  {
+    path = djikstras(resource, source, destination, algo);
+  }
+  
+   
   stack<int> route;
   string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   string link;
@@ -58,9 +68,8 @@ int RouteCall(char source, char destination, EventList currentEvent, int resourc
 
   string s, d; 
 
-  srcNode = path.top();  s = alpha[srcNode];
+  srcNode = path.top();  //s = alpha[srcNode];
   path.pop();
-  
 
   while(!path.empty())
   {
@@ -105,6 +114,9 @@ int RouteCall(char source, char destination, EventList currentEvent, int resourc
     }else if (algo == "SDPF"){
       sdpfHops++; // increase links it went through, for shortest delay path first 
       sdpfDelay = sdpfDelay + propdelay[srcNode][dstNode];; // store delay for links traversed through 
+    }else if (algo == "LLP"){
+      llpHops++; // increase links it went through, for Least Loaded path
+      llpDelay = llpDelay + propdelay[srcNode][dstNode];; // store delay for links traversed through 
     }
     srcNode = dstNode; s = d; // set to next node 
   }
@@ -187,8 +199,11 @@ void simulatePolicy(string algo, int resource[MATRIX_SIZE][MATRIX_SIZE], list<Ev
     //shpfAverage = shpfHops/success; // calculate hops for SHPF
     cout << "SHPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t" << shpfHops/success << "\t" << shpfDelay/success << endl;
   }else if(algo == "SDPF"){ 
-    cout << "SDPF\t" << totalCalls << "\t" << success <<"\t" << blocked << "\t" << sdpfHops/success << "\t" << sdpfDelay/success << endl;
+    cout << "SDPF\t" << totalCalls << "\t" << success <<"\t" << blocked << " ("<< blocked/100 << ")"<<"\t" << sdpfHops/success << "\t" << sdpfDelay/success << endl;
+  } else if(algo == "LLP"){ 
+    cout << "LLP\t" << totalCalls << "\t" << success <<"\t" << blocked << " ("<< blocked/100 << ")"<<"\t " << llpHops/success << "\t" << llpDelay/success << endl;
   } 
+  
 }
 
 int main()
@@ -215,7 +230,6 @@ int main()
     available[col][row] = cap;
     cost[row][col] = 1;
     cost[col][row] = 1;
-
   }
   fclose(fp1);
 
@@ -250,12 +264,13 @@ int main()
   }
   fclose(fp2);
 
-  // sort topology list in order for the event to arrive in order
+  // sort topology list in order for the event to arrive in order 
   workLoad.sort(compareEvent);
 
   //Print final report for each policy 
   cout << "Policy\tCalls\tSuccess\tBlocked(%)\tHops\tDelay"<< endl;
   cout <<"  -----------------------------------------------" << endl; 
-  //simulatePolicy("SHPF", cost, workLoad); // Run Simulation for Short Hop Path First
+  simulatePolicy("SHPF", cost, workLoad); // Run Simulation for Short Hop Path First
   simulatePolicy("SDPF", propdelay, workLoad); // Run Simulation for Short Delay Path First 
+  simulatePolicy("LLP", available, workLoad); // Run Simulation for Short Delay Path First
 }
