@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <algorithm>
 #include <map>
 #include <list>
@@ -14,8 +13,8 @@ using namespace std;
 #define CALL_ARRIVAL 0
 #define CALL_END 1
 #define MATRIX_SIZE 26
-#define TOPOLOGY_DATA   "topology.dat" //"topology_small.dat"  "top_sina.dat" 
-#define WORKLOAD_DATA    "callworkload.dat" //"callworkload_small.dat" "work_sina.dat"
+#define TOPOLOGY_DATA  "topology.dat" 
+#define WORKLOAD_DATA  "callworkload.dat"
 
 /* Event record */
 struct Event
@@ -56,12 +55,12 @@ void resetCost(int graph[MATRIX_SIZE][MATRIX_SIZE], string algo){
         if (available[i][j] > 0){ // reset link availability
           graph[i][j] = 1;
         }else{
-          graph[i][j] = 0;
+          graph[i][j] = 0; // no links available 
         }
       }
       else if (algo == "SDPF"){
         if (available[i][j] > 0){
-          graph[i][j] = propdelay[i][j];
+          graph[i][j] = propdelay[i][j]; // set link pro
         }else{
           graph[i][j] = 0;
         }
@@ -69,7 +68,7 @@ void resetCost(int graph[MATRIX_SIZE][MATRIX_SIZE], string algo){
       else if (algo == "RESET")
       {
         if (reset[i][j] > 0){
-          graph[i][j] = reset[i][j];
+          graph[i][j] = reset[i][j]; 
         }
       }
       
@@ -91,7 +90,7 @@ int RouteCall(char source, char destination, EventList currentEvent, int resourc
   else if (algo == "SDPF")
   {
     int delayCost[MATRIX_SIZE][MATRIX_SIZE];
-    resetCost(delayCost, "SDPF");
+    resetCost(delayCost, "SDPF"); // reset delay graph 
     path = djikstras(delayCost, source, destination);
   }
   else if (algo == "LLP"){
@@ -146,7 +145,7 @@ int RouteCall(char source, char destination, EventList currentEvent, int resourc
     link = s + d;
     //cout <<" Taking from Link: " << link << endl;
     
-    // restore capacity back to link 
+    // take capacity from link 
     available[srcNode1][dstNode1] = available[srcNode1][dstNode1] - 1; 
     available[dstNode1][srcNode1] = available[dstNode1][srcNode1] - 1;
 
@@ -160,7 +159,7 @@ int RouteCall(char source, char destination, EventList currentEvent, int resourc
       //cout << "total delay: " << sdpfDelay<< endl;
     }else if (algo == "LLP"){
       llpHops++; // increase links it went through, for Least Loaded path
-      llpDelay = llpDelay + propdelay[srcNode1][dstNode1]; // store delay for links traversed through 
+      llpDelay += propdelay[srcNode1][dstNode1]; // store delay for links traversed through 
     }else if (algo == "MFC"){
       mfcHops++; // increase links it went through, for Least Loaded path
       mfcDelay = mfcDelay + propdelay[srcNode1][dstNode1]; // store delay for links traversed through 
@@ -184,7 +183,6 @@ void ReleaseCall(int callid)
     stack<int> route = routesUsed[callid]; 
     int srcNode = 0, dstNode=0;
     
-    //cout << "release route length: " << route.size() << endl; 
     srcNode = route.top(); s = alpha[srcNode]; // get first node 
     route.pop();
 
@@ -197,17 +195,12 @@ void ReleaseCall(int callid)
       //cout <<"Link Released: " << link << endl;
 
       // increase capacity by 1 
-      //cout << " link cap  1: " << available[srcNode][dstNode] << " link cap 2: " << available[srcNode][dstNode] << endl; 
-
       available[srcNode][dstNode] = available[srcNode][dstNode] +1; 
       available[dstNode][srcNode] = available[dstNode][srcNode] +1;
 
       srcNode = dstNode; // set to previous destination 
       s = alpha[srcNode];
     }
-  }
-  else{
-    //cout << "Invalid release call" << endl;
   }
 }
 
@@ -286,8 +279,6 @@ int main()
     capacity[col][row] = cap;
     available[row][col] = cap;
     available[col][row] = cap;
-    reset[row][col] = cap;
-    reset[col][row] = cap;
     cost[row][col] = 1;
     cost[col][row] = 1;
   }
@@ -339,6 +330,6 @@ int main()
   simulatePolicy("LLP", available, workLoad); // Run Simulation for Short Delay Path First
   routesUsed.clear(); // clear map for next round 
 
-  //simulatePolicy("MFC", available, workLoad); // Run Simulation for Maximum free circuits
-  //routesUsed.clear(); // clear map for next round 
+  simulatePolicy("MFC", available, workLoad); // Run Simulation for Maximum free circuits
+  routesUsed.clear(); // clear map for next round 
 }

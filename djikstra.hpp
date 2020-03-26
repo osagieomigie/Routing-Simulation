@@ -47,16 +47,9 @@ stack<int> djikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], char src, char dst)
 
     setPath[u] = true;
 
-    //if U is the DST then early exit
-    if (u == dst - 'A')
-    {
-      break;
-    }
-    //if (dist[u] == INT_MAX) continue;
-
     for (int v = 0; v < MATRIX_SIZE; v++)
     {
-      if (!setPath[v] && graph[u][v] && dist[u] != INT_MAX && dist[u] + graph[u][v] < dist[v])
+      if (!setPath[v] && graph[u][v] && dist[u] != INT_MAX && dist[u] + graph[u][v] < dist[v]) 
       {
         dist[v] = dist[u] + graph[u][v];
         previous[v] = u;
@@ -64,6 +57,7 @@ stack<int> djikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], char src, char dst)
     }
   }
 
+    // backtracks, in order to get path used 
   stack<int> path;
   int u = dst - 'A';
   if (previous[u] != INT_MAX)
@@ -75,13 +69,9 @@ stack<int> djikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], char src, char dst)
     }
   }
 
-    //cout << "path length: " << path.size()<< endl; 
   return path;
 } 
 
-/* A utility function to find the vertex with minimum distance
-value, from the set of vertices not yet included in shortest
-path tree */
 int min1Distance(double dist[], bool sptSet[])
 {
   // Initialize min value
@@ -95,13 +85,15 @@ int min1Distance(double dist[], bool sptSet[])
   return min_index;
 }
 
+// LLP djikstra implementation 
 stack<int> llpDjikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], int capacity[MATRIX_SIZE][MATRIX_SIZE], char src, char dst, string algo)
 {
     string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     double dist[MATRIX_SIZE];
     bool setPath[MATRIX_SIZE];
-    int previous[MATRIX_SIZE];
-    double load = 0; 
+    double previous[MATRIX_SIZE];
+    double load = 0;
+    double cost = 0; 
 
   for (int i = 0; i < MATRIX_SIZE; i++)
   {
@@ -120,12 +112,14 @@ stack<int> llpDjikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], int capacity[MATRIX
     for (int v = 0; v < MATRIX_SIZE; v++)
     { 
         load = 0;
-        if (graph[u][v]){
-            load = 1 - ((double) graph[u][v] / (double) capacity[u][v]);
+        if(graph[u][v]) {
+            load = 1.0 - ((double) graph[u][v] / (double) capacity[u][v]);
         }
-        if (!setPath[v] && graph[u][v] && dist[u] != INT_MAX && dist[u] + load < dist[v]) {
-            dist[v] = max(dist[u], dist[v]);
-            dist[v] = dist[u] + load;
+
+        cost = max(load,dist[u]);
+        if (!setPath[v] && graph[u][v] && dist[u] != INT_MAX && cost < dist[v]) {
+            //dist[v] = max(dist[u], dist[v]);
+            dist[v] = cost;
             previous[v] = u;
         }
     }
@@ -147,12 +141,12 @@ stack<int> llpDjikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], int capacity[MATRIX
 /* A utility function to find the vertex with minimum distance
 value, from the set of vertices not yet included in shortest
 path tree */
-int min2Distance(double dist[], bool sptSet[])
+int min2Distance(int dist[], bool sptSet[])
 {
   // Initialize min value
   int min = -1, min_index;
   for (int v = 0; v < MATRIX_SIZE; v++){
-    if (sptSet[v] == false && dist[v] <= min){
+    if (sptSet[v] == false && dist[v] > min){
       min = dist[v], min_index = v;
     }
   }
@@ -160,10 +154,11 @@ int min2Distance(double dist[], bool sptSet[])
   return min_index;
 }
 
+// MFC djikstra implementation 
 stack<int> mfcDjikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], int capacity[MATRIX_SIZE][MATRIX_SIZE], char src, char dst, string algo)
 {
     string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    double dist[MATRIX_SIZE];
+    int dist[MATRIX_SIZE];
     bool setPath[MATRIX_SIZE];
     int previous[MATRIX_SIZE];
     double load = 0; 
@@ -184,27 +179,25 @@ stack<int> mfcDjikstras(int graph[MATRIX_SIZE][MATRIX_SIZE], int capacity[MATRIX
     
     for (int v = 0; v < MATRIX_SIZE; v++)
     { 
-        load = 0;
-        if (graph[u][v] <= 0){
-            load = (double) capacity[u][v];
-        }else
-        {
-            load = min(dist[v],dist[u]);
-        }
-        
-
-        if (!setPath[v] && graph[u][v] && dist[u] != -1 && dist[u] + load < dist[v]) {
-            dist[v] = dist[v] = dist[u] + load; //min(dist[u], dist[v]);
-            previous[v] = u;
-        }
+      if (graph[u][v]){
+          load = (double) graph[u][v];
+      }else
+      {
+        load = min(dist[u], capacity[u][v]);
+      }
+      
+      if (!setPath[v] && graph[u][v] && dist[u] != -1 && load > dist[v]) {
+        dist[v] = load; //min(dist[u], dist[v]);
+        previous[v] = u;
+      }
     }
   }
 
   stack<int> path;
   int u = dst - 'A';
-  if (previous[u] != INT_MAX)
+  if (previous[u] != -1)
   {
-    while (u != INT_MAX){
+    while (u != -1){
       path.push(u);
       u = previous[u];
     }
